@@ -174,7 +174,6 @@ CREATE TABLE jobs (
 
 -- ============================================================
 -- JOB APPLICATIONS
--- renamed from applications
 -- ============================================================
 
 CREATE TABLE job_applications (
