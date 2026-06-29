@@ -193,9 +193,6 @@ CREATE TABLE job_applications (
     updated_by BIGINT NULL,
     deleted_by BIGINT NULL,
 
-    CONSTRAINT uq_job_applications_user_job
-        UNIQUE (user_id, job_id),
-
     CONSTRAINT fk_job_applications_user
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
 
@@ -219,6 +216,8 @@ CREATE TABLE job_applications (
 -- ============================================================
 
 CREATE TABLE user_skills (
+    id BIGSERIAL PRIMARY KEY,
+
     user_id BIGINT NOT NULL,
     skill_id BIGINT NOT NULL,
 
@@ -229,9 +228,6 @@ CREATE TABLE user_skills (
     created_by BIGINT NULL,
     updated_by BIGINT NULL,
     deleted_by BIGINT NULL,
-
-    CONSTRAINT pk_user_skills
-        PRIMARY KEY (user_id, skill_id),
 
     CONSTRAINT fk_user_skills_user
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -256,6 +252,8 @@ CREATE TABLE user_skills (
 -- ============================================================
 
 CREATE TABLE job_skills (
+    id BIGSERIAL PRIMARY KEY,
+
     job_id BIGINT NOT NULL,
     skill_id BIGINT NOT NULL,
 
@@ -266,9 +264,6 @@ CREATE TABLE job_skills (
     created_by BIGINT NULL,
     updated_by BIGINT NULL,
     deleted_by BIGINT NULL,
-
-    CONSTRAINT pk_job_skills
-        PRIMARY KEY (job_id, skill_id),
 
     CONSTRAINT fk_job_skills_job
         FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
@@ -294,9 +289,8 @@ CREATE TABLE job_skills (
 -- NOTE:
 -- users.email already has an index because of UNIQUE constraint.
 -- skills.name already has an index because of UNIQUE constraint.
--- job_applications(user_id, job_id) already has an index because of UNIQUE constraint.
--- user_skills(user_id, skill_id) already has an index because of PRIMARY KEY.
--- job_skills(job_id, skill_id) already has an index because of PRIMARY KEY.
+-- job_applications, user_skills, and job_skills use partial unique indexes
+-- so uniqueness is enforced only for active rows where deleted_at IS NULL.
 
 
 -- Companies
@@ -337,6 +331,10 @@ ON jobs (deleted_at);
 
 
 -- Job Applications
+CREATE UNIQUE INDEX uq_job_applications_user_job_active
+ON job_applications (user_id, job_id)
+WHERE deleted_at IS NULL;
+
 CREATE INDEX idx_job_applications_user_id
 ON job_applications (user_id);
 
@@ -356,6 +354,13 @@ ON skills (deleted_at);
 
 
 -- User Skills
+CREATE UNIQUE INDEX uq_user_skills_user_skill_active
+ON user_skills (user_id, skill_id)
+WHERE deleted_at IS NULL;
+
+CREATE INDEX idx_user_skills_user_id
+ON user_skills (user_id);
+
 CREATE INDEX idx_user_skills_skill_id
 ON user_skills (skill_id);
 
@@ -364,6 +369,13 @@ ON user_skills (deleted_at);
 
 
 -- Job Skills
+CREATE UNIQUE INDEX uq_job_skills_job_skill_active
+ON job_skills (job_id, skill_id)
+WHERE deleted_at IS NULL;
+
+CREATE INDEX idx_job_skills_job_id
+ON job_skills (job_id);
+
 CREATE INDEX idx_job_skills_skill_id
 ON job_skills (skill_id);
 
