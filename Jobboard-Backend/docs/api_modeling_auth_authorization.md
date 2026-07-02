@@ -14,7 +14,7 @@ Jobs
 Job Applications
 Skills
 
-# 1. API Modeling / API Style
+## 2. API Modeling / API Style
 
 ## Decision
 
