@@ -94,8 +94,8 @@ DELETE /api/v1/jobs/{id}
 POST   /api/v1/jobs/{job_id}/applications
 GET    /api/v1/applications/me
 GET    /api/v1/jobs/{job_id}/applications
-PATCH  /api/v1/job-applications/{id}
-DELETE /api/v1/job-applications/{id}
+PATCH  /api/v1/applications/{id}
+DELETE /api/v1/applications/{id}
 
 ### Skills
 
