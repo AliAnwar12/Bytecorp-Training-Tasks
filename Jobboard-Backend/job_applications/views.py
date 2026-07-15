@@ -3,7 +3,7 @@ from rest_framework import generics, status
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-
+from common.exceptions import ConflictError
 from accounts.models import User
 from accounts.permissions import IsJobSeeker
 from companies.models import CompanyMember
@@ -35,7 +35,7 @@ class ApplyToJobView(generics.CreateAPIView):
         ).exists()
 
         if already_applied:
-            raise ValidationError("You have already applied to this job.")
+            raise ConflictError("You have already applied to this job.")
 
         serializer.save(
             user=self.request.user,
