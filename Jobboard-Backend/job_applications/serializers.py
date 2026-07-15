@@ -31,8 +31,32 @@ class JobApplicationSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def validate_cover_letter(self, value):
+        if value:
+            value = value.strip()
+
+            if len(value) < 10:
+                raise serializers.ValidationError(
+                    "Cover letter must be at least 10 characters long."
+                )
+
+        return value
+
 
 class JobApplicationStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobApplication
         fields = ["status"]
+
+    def validate_status(self, value):
+        allowed_statuses = [
+            JobApplication.Statuses.PENDING,
+            JobApplication.Statuses.REVIEWED,
+            JobApplication.Statuses.SHORTLISTED,
+            JobApplication.Statuses.REJECTED,
+        ]
+
+        if value not in allowed_statuses:
+            raise serializers.ValidationError("Invalid application status.")
+
+        return value
