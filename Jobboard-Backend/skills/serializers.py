@@ -23,6 +23,14 @@ class UserSkillSerializer(serializers.ModelSerializer):
 
 
 class JobSkillSerializer(serializers.ModelSerializer):
+    job = serializers.PrimaryKeyRelatedField(
+        queryset=JobSkill._meta.get_field("job").remote_field.model.objects.filter(
+            deleted_at__isnull=True
+        )
+    )
+    skill = serializers.PrimaryKeyRelatedField(
+        queryset=Skill.objects.filter(deleted_at__isnull=True)
+    )
     skill_name = serializers.CharField(source="skill.name", read_only=True)
 
     class Meta:
