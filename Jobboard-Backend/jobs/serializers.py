@@ -29,3 +29,8 @@ class JobSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def update(self, instance, validated_data):
+        # Prevent changing job ownership via updates.
+        validated_data.pop("company", None)
+        return super().update(instance, validated_data)
