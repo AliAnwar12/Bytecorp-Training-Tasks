@@ -51,12 +51,40 @@ class MyUserSkillViewSet(viewsets.ModelViewSet):
 class JobSkillViewSet(viewsets.ModelViewSet):
     serializer_class = JobSkillSerializer
     permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "delete", "head", "options"]
 
     def get_queryset(self):
         return JobSkill.objects.filter(deleted_at__isnull=True)
 
+    def _assert_can_manage(self, job):
+        from rest_framework.exceptions import PermissionDenied
+
+        from accounts.models import User
+        from companies.models import CompanyMember
+
+        user = self.request.user
+
+        if user.role == User.Roles.ADMIN:
+            return
+
+        if user.role != User.Roles.COMPANY_REPRESENTATIVE:
+            raise PermissionDenied("You do not have permission to manage job skills.")
+
+        is_member = CompanyMember.objects.filter(
+            company=job.company,
+            user=user,
+            deleted_at__isnull=True,
+        ).exists()
+
+        if not is_member:
+            raise PermissionDenied(
+                "You can manage job skills only for your own company jobs."
+            )
+
     def perform_create(self, serializer):
+        self._assert_can_manage(serializer.validated_data["job"])
         serializer.save(created_by=self.request.user)
 
     def perform_destroy(self, instance):
+        self._assert_can_manage(instance.job)
         instance.soft_delete(user=self.request.user)
