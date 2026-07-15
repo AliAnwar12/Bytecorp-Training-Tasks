@@ -103,11 +103,7 @@ SIMPLE_JWT = {
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-from datetime import timedelta
-
-SECRET_KEY = config("SECRET_KEY")
-DEBUG = config("DEBUG", default=True, cast=bool)
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
+# SECRET_KEY/DEBUG/ALLOWED_HOSTS are configured above; avoid redefining them here.
 
 DATABASES = {
     "default": {
