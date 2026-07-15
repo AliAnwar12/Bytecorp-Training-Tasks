@@ -11,6 +11,9 @@ class SkillSerializer(serializers.ModelSerializer):
 
 
 class UserSkillSerializer(serializers.ModelSerializer):
+    skill = serializers.PrimaryKeyRelatedField(
+        queryset=Skill.objects.filter(deleted_at__isnull=True)
+    )
     skill_name = serializers.CharField(source="skill.name", read_only=True)
 
     class Meta:
