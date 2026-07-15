@@ -21,7 +21,14 @@ class JobViewSet(viewsets.ModelViewSet):
     ordering = ["-created_at"]
 
     def get_queryset(self):
-        return Job.objects.select_related("company").filter(deleted_at__isnull=True)
+        qs = Job.objects.select_related("company").filter(deleted_at__isnull=True)
+
+        # Public/job-seeker browsing should only expose open jobs.
+        user = self.request.user
+        if not user.is_authenticated or user.role == User.Roles.JOB_SEEKER:
+            qs = qs.filter(status=Job.Statuses.OPEN)
+
+        return qs
 
     def get_permissions(self):
         if self.action in ["list", "retrieve"]:
