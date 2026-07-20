@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
@@ -24,15 +25,19 @@ class CompanyViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated(), IsCompanyMemberOrAdmin()]
 
     def perform_create(self, serializer):
-        company = serializer.save(created_by=self.request.user)
+        # Creating a company writes to two tables: `companies` and, for a
+        # company representative, `company_members` (they're auto-enrolled
+        # as the owner). Both writes must succeed or neither should.
+        with transaction.atomic():
+            company = serializer.save(created_by=self.request.user)
 
-        if self.request.user.role == User.Roles.COMPANY_REPRESENTATIVE:
-            CompanyMember.objects.create(
-                company=company,
-                user=self.request.user,
-                role=CompanyMember.MemberRoles.OWNER,
-                created_by=self.request.user,
-            )
+            if self.request.user.role == User.Roles.COMPANY_REPRESENTATIVE:
+                CompanyMember.objects.create(
+                    company=company,
+                    user=self.request.user,
+                    role=CompanyMember.MemberRoles.OWNER,
+                    created_by=self.request.user,
+                )
 
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
