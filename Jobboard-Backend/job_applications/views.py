@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -28,20 +29,27 @@ class ApplyToJobView(generics.CreateAPIView):
             deleted_at__isnull=True,
         )
 
-        already_applied = JobApplication.objects.filter(
-            user=self.request.user,
-            job=job,
-            deleted_at__isnull=True,
-        ).exists()
+        # Check-then-create: two requests from the same user for the same
+        # job can race between the check and the create. select_for_update
+        # only locks rows that already exist, so the real guarantee against
+        # a lost race is the uq_job_applications_user_job_active unique
+        # constraint + the IntegrityError -> 409 handler in
+        # common.exceptions.custom_exception_handler.
+        with transaction.atomic():
+            already_applied = JobApplication.objects.select_for_update().filter(
+                user=self.request.user,
+                job=job,
+                deleted_at__isnull=True,
+            ).exists()
 
-        if already_applied:
-            raise ConflictError("You have already applied to this job.")
+            if already_applied:
+                raise ConflictError("You have already applied to this job.")
 
-        serializer.save(
-            user=self.request.user,
-            job=job,
-            created_by=self.request.user,
-        )
+            serializer.save(
+                user=self.request.user,
+                job=job,
+                created_by=self.request.user,
+            )
 
 
 class MyApplicationsView(generics.ListAPIView):
