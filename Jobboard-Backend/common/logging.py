@@ -1,13 +1,19 @@
 import contextvars
 import json
 import logging
-
+import uuid
 
 request_id_var = contextvars.ContextVar("request_id", default=None)
 current_user_var = contextvars.ContextVar("current_user", default=None)
 request_data_var = contextvars.ContextVar("request_data", default=None)
 response_data_var = contextvars.ContextVar("response_data", default=None)
 
+def new_request_id():
+    return str(uuid.uuid4())
+
+
+def get_request_id():
+    return request_id_var.get()
 
 SENSITIVE_FIELDS = {
     "password",
