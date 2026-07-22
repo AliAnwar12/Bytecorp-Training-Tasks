@@ -1,117 +1,139 @@
-"""
-Automatic audit trail. audit.apps.AuditConfig.ready() connects these
-handlers to every model that extends common.models.AuditModel - auditing a
-new model is then free, nothing to add per-view.
-"""
-
-import logging
-
 from django.db.models.signals import post_delete, post_save, pre_save
+from django.dispatch import receiver
 
-from common.logging import get_current_user, get_request_id
-
-logger = logging.getLogger(__name__)
-
-EXCLUDED_FIELDS = {"password", "password_hash"}
-NOISY_FIELDS = {"updated_at"}
-
-
-def _serialize(value):
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    return str(value)
+from audit.models import AuditLog
+from common.logging import (
+    current_user_var,
+    request_data_var,
+    request_id_var,
+    response_data_var,
+)
+from common.models import AuditModel
 
 
-def _field_values(instance):
-    values = {}
-    for field in instance._meta.concrete_fields:
-        name = field.attname
-        if field.name in EXCLUDED_FIELDS or name in EXCLUDED_FIELDS:
+SENSITIVE_FIELDS = {"password", "password_hash"}
+
+
+def get_actor():
+    user = current_user_var.get()
+
+    if user and getattr(user, "is_authenticated", False):
+        return user
+
+    return None
+
+
+def get_request_context():
+    request_data = request_data_var.get() or {}
+    response_data = response_data_var.get() or {}
+
+    return {
+        "request_method": request_data.get("method"),
+        "request_path": request_data.get("path"),
+        "request_body": request_data.get("body"),
+        "response_status_code": response_data.get("status_code"),
+        "response_body": response_data.get("body"),
+    }
+
+
+def serialize_instance(instance):
+    data = {}
+
+    for field in instance._meta.fields:
+        field_name = field.name
+
+        if field_name in SENSITIVE_FIELDS:
+            data[field_name] = "[REDACTED]"
             continue
-        values[name] = _serialize(getattr(instance, name))
-    return values
+
+        value = getattr(instance, field_name, None)
+
+        try:
+            json_value = value
+            if hasattr(value, "isoformat"):
+                json_value = value.isoformat()
+            elif hasattr(value, "pk"):
+                json_value = value.pk
+
+            data[field_name] = json_value
+        except Exception:
+            data[field_name] = str(value)
+
+    return data
 
 
-def _write_log(action, instance, changes):
-    from audit.models import AuditLog
-
-    if not changes:
+def create_audit_log(instance, action, changes=None):
+    if isinstance(instance, AuditLog):
         return
 
-    user = get_current_user()
-    is_authenticated = bool(user and getattr(user, "is_authenticated", False))
+    actor = get_actor()
+    context = get_request_context()
 
     AuditLog.objects.create(
         action=action,
-        model_name=f"{instance._meta.app_label}.{instance._meta.object_name}",
+        model_name=instance._meta.label,
         object_id=str(instance.pk),
-        object_repr=str(instance)[:255],
-        changes=changes,
-        actor=user if is_authenticated else None,
-        actor_email=getattr(user, "email", None) if is_authenticated else None,
-        request_id=get_request_id(),
+        object_repr=str(instance),
+        changes=changes or {},
+        actor=actor,
+        actor_email=getattr(actor, "email", None) if actor else None,
+        request_id=request_id_var.get(),
+        **context,
     )
 
 
-def _pre_save(sender, instance, **kwargs):
-    if instance.pk:
-        try:
-            instance._audit_previous = sender.objects.get(pk=instance.pk)
-        except sender.DoesNotExist:
-            instance._audit_previous = None
-    else:
-        instance._audit_previous = None
-
-
-def _post_save(sender, instance, created, **kwargs):
-    from audit.models import AuditLog
-
-    try:
-        if created:
-            changes = {
-                field: {"new": value}
-                for field, value in _field_values(instance).items()
-                if field not in NOISY_FIELDS
-            }
-            _write_log(AuditLog.Actions.CREATE, instance, changes)
-            return
-
-        previous = getattr(instance, "_audit_previous", None)
-        if previous is None:
-            return
-
-        old_values = _field_values(previous)
-        new_values = _field_values(instance)
-
-        changes = {
-            field: {"old": old_values.get(field), "new": new_value}
-            for field, new_value in new_values.items()
-            if field not in NOISY_FIELDS and old_values.get(field) != new_value
-        }
-
-        action = AuditLog.Actions.UPDATE
-        if changes.get("deleted_at") and old_values.get("deleted_at") is None:
-            action = AuditLog.Actions.DELETE
-
-        _write_log(action, instance, changes)
-    except Exception:
-        logger.exception("Failed to write audit log for %s", sender.__name__)
-
-
-def _post_delete(sender, instance, **kwargs):
-    from audit.models import AuditLog
-
-    try:
-        _write_log(
-            AuditLog.Actions.DELETE,
-            instance,
-            {"deleted_at": {"old": None, "new": "hard-deleted"}},
-        )
-    except Exception:
-        logger.exception("Failed to write audit log for hard delete of %s", sender.__name__)
-
-
 def register_audit_signals(model):
-    pre_save.connect(_pre_save, sender=model, weak=False, dispatch_uid=f"audit-pre-save-{model.__name__}")
-    post_save.connect(_post_save, sender=model, weak=False, dispatch_uid=f"audit-post-save-{model.__name__}")
-    post_delete.connect(_post_delete, sender=model, weak=False, dispatch_uid=f"audit-post-delete-{model.__name__}")
+    if not issubclass(model, AuditModel):
+        return
+
+    @receiver(pre_save, sender=model, weak=False)
+    def audit_pre_save(sender, instance, **kwargs):
+        if not instance.pk:
+            instance._audit_old_data = None
+            return
+
+        try:
+            old_instance = sender.objects.get(pk=instance.pk)
+            instance._audit_old_data = serialize_instance(old_instance)
+        except sender.DoesNotExist:
+            instance._audit_old_data = None
+
+    @receiver(post_save, sender=model, weak=False)
+    def audit_post_save(sender, instance, created, **kwargs):
+        new_data = serialize_instance(instance)
+
+        if created:
+            create_audit_log(
+                instance=instance,
+                action=AuditLog.Actions.CREATE,
+                changes={"new": new_data},
+            )
+            return
+
+        old_data = getattr(instance, "_audit_old_data", None)
+
+        changes = {}
+
+        if old_data:
+            for key, old_value in old_data.items():
+                new_value = new_data.get(key)
+
+                if old_value != new_value:
+                    changes[key] = {
+                        "old": old_value,
+                        "new": new_value,
+                    }
+
+        create_audit_log(
+            instance=instance,
+            action=AuditLog.Actions.UPDATE,
+            changes=changes,
+        )
+
+    @receiver(post_delete, sender=model, weak=False)
+    def audit_post_delete(sender, instance, **kwargs):
+        create_audit_log(
+            instance=instance,
+            action=AuditLog.Actions.DELETE,
+            changes={"deleted": serialize_instance(instance)},
+        )

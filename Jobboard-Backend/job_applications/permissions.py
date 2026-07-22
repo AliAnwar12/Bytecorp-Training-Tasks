@@ -5,11 +5,15 @@ from companies.models import CompanyMember
 
 
 class IsApplicationOwner(BasePermission):
+    message = "You can access only your own application."
+
     def has_object_permission(self, request, view, obj):
         return request.user.is_authenticated and obj.user_id == request.user.id
 
 
 class CanManageApplicationForCompanyJob(BasePermission):
+    message = "You are not a member of this company."
+
     def has_object_permission(self, request, view, obj):
         if not request.user.is_authenticated:
             return False

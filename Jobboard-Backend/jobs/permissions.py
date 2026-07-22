@@ -5,6 +5,8 @@ from companies.models import CompanyMember
 
 
 class IsJobCompanyMemberOrAdmin(BasePermission):
+    message = "You are not a member of this company."
+
     def has_object_permission(self, request, view, obj):
         if not request.user.is_authenticated:
             return False

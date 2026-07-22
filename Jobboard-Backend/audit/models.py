@@ -7,6 +7,7 @@ class AuditLog(models.Model):
         CREATE = "create", "Create"
         UPDATE = "update", "Update"
         DELETE = "delete", "Delete"
+        REQUEST = "request", "Request"
 
     action = models.CharField(max_length=10, choices=Actions.choices)
     model_name = models.CharField(max_length=100)
@@ -23,6 +24,12 @@ class AuditLog(models.Model):
     )
     actor_email = models.CharField(max_length=255, null=True, blank=True)
     request_id = models.CharField(max_length=64, null=True, blank=True)
+    request_method = models.CharField(max_length=10, null=True, blank=True)
+    request_path = models.TextField(null=True, blank=True)
+    request_body = models.JSONField(null=True, blank=True)
+
+    response_status_code = models.IntegerField(null=True, blank=True)
+    response_body = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
