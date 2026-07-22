@@ -16,6 +16,11 @@ class AuditLogSerializer(serializers.ModelSerializer):
             "actor",
             "actor_email",
             "request_id",
+            "request_method",
+            "request_path",
+            "request_body",
+            "response_status_code",
+            "response_body",
             "created_at",
         ]
         read_only_fields = fields
