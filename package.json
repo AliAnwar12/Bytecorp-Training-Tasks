@@ -1,0 +1,14 @@
+{
+  "name": "bytecorp-jobboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ByteCorp Full Stack Job Board Platform",
+  "scripts": {
+    "backend": "cd Jobboard-Backend && .\\venv\\Scripts\\python.exe manage.py runserver 127.0.0.1:8000",
+    "frontend": "npm run dev --prefix Jobboard-Frontend",
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"blue,cyan\" \"npm run backend\" \"npm run frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}

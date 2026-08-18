@@ -50,11 +50,15 @@ class MyUserSkillViewSet(viewsets.ModelViewSet):
 
 class JobSkillViewSet(viewsets.ModelViewSet):
     serializer_class = JobSkillSerializer
-    permission_classes = [IsAuthenticated]
     http_method_names = ["get", "post", "delete", "head", "options"]
 
     def get_queryset(self):
         return JobSkill.objects.filter(deleted_at__isnull=True)
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def _assert_can_manage(self, job):
         from rest_framework.exceptions import PermissionDenied
