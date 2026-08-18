@@ -11,6 +11,8 @@ class JobFilter(django_filters.FilterSet):
     class Meta:
         model = Job
         fields = [
+            "company",
+            "created_by",
             "location",
             "status",
             "employment_type",

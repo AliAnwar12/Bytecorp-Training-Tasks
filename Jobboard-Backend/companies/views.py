@@ -13,7 +13,15 @@ class CompanyViewSet(viewsets.ModelViewSet):
     serializer_class = CompanySerializer
 
     def get_queryset(self):
-        return Company.objects.filter(deleted_at__isnull=True)
+        qs = Company.objects.filter(deleted_at__isnull=True)
+        user = self.request.user
+        if self.request.query_params.get("mine") == "true" and user.is_authenticated:
+            if user.role != User.Roles.ADMIN:
+                qs = qs.filter(
+                    members__user=user,
+                    members__deleted_at__isnull=True,
+                ).distinct()
+        return qs
 
     def get_permissions(self):
         if self.action in ["list", "retrieve"]:

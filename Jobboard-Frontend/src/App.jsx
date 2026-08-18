@@ -1,286 +1,152 @@
-import { useEffect, useState } from "react";
-import apiClient from "./api/apiClient";
-import JobsPage from "./pages/JobsPage";
+import { useState, useEffect } from "react";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ToastProvider } from "./context/ToastContext";
+import Navbar from "./components/Navbar";
+import DiscoveryPage from "./pages/DiscoveryPage";
+import CandidateDashboard from "./pages/CandidateDashboard";
+import EmployerDashboard from "./pages/EmployerDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
+import AuthPage from "./pages/AuthPage";
+import JobFormModal from "./components/JobFormModal";
 import "./index.css";
 
-function App() {
-  const [view, setView] = useState("login");
-  const [currentUser, setCurrentUser] = useState(null);
-  const [authStatus, setAuthStatus] = useState("checking");
+function AppContent() {
+  const { currentUser, isAuthenticated, isJobSeeker, isCompanyRep, isAdmin, authStatus } = useAuth();
+  const [currentView, setCurrentView] = useState("discovery"); // 'discovery' | 'candidate' | 'employer' | 'admin' | 'auth-login' | 'auth-register'
+  const [viewHistory, setViewHistory] = useState([]);
+  const [showGlobalPostJobModal, setShowGlobalPostJobModal] = useState(false);
 
+  // Automatically redirect away from protected views upon logout or unauthenticated access
   useEffect(() => {
-    async function loadCurrentUser() {
-      const accessToken = localStorage.getItem("access_token");
-
-      if (!accessToken) {
-        setAuthStatus("idle");
-        return;
-      }
-
-      try {
-        const response = await apiClient.get("/auth/me/");
-        setCurrentUser(response.data);
-        setView("jobs");
-      } catch {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-      } finally {
-        setAuthStatus("idle");
-      }
+    if (!isAuthenticated && (currentView === "candidate" || currentView === "employer" || currentView === "admin")) {
+      setCurrentView("discovery");
+      setViewHistory([]);
     }
+  }, [isAuthenticated, currentView]);
 
-    loadCurrentUser();
-  }, []);
+  const handleNavigateView = (view) => {
+    if (view !== currentView) {
+      setViewHistory((prev) => [...prev, currentView]);
+      setCurrentView(view);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
 
-  function handleAuthSuccess(user) {
-    setCurrentUser(user);
-    setView("jobs");
-  }
+  const handleGoBack = () => {
+    if (viewHistory.length > 0) {
+      const prev = [...viewHistory];
+      const previousView = prev.pop();
+      setViewHistory(prev);
+      setCurrentView(previousView || "discovery");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      setCurrentView("discovery");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
 
-  function handleLogout() {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    setCurrentUser(null);
-    setView("login");
-  }
+  const canGoBack = viewHistory.length > 0 || currentView !== "discovery";
 
-  if (authStatus === "checking") {
+  const handleAuthSuccess = (user) => {
+    if (user.role === "company_representative") {
+      setCurrentView("employer");
+    } else if (user.role === "admin") {
+      setCurrentView("admin");
+    } else {
+      setCurrentView("discovery");
+    }
+    setViewHistory([]);
+  };
+
+  if (authStatus === "loading") {
     return (
-      <main className="auth-shell">
-        <p className="info">Checking your session...</p>
-      </main>
+      <div className="auth-shell">
+        <div className="empty-state-card" style={{ maxWidth: "340px" }}>
+          <div className="skeleton skeleton-avatar" style={{ width: "50px", height: "50px", borderRadius: "50%" }} />
+          <h3>Connecting to JobBoard</h3>
+          <p>Verifying secure session tokens...</p>
+        </div>
+      </div>
     );
   }
 
-  if (view === "jobs") {
-    return <JobsPage currentUser={currentUser} onLogout={handleLogout} />;
+  // Auth pages view
+  if (currentView === "auth-login" || currentView === "auth-register") {
+    return (
+      <>
+        <Navbar
+          currentView={currentView}
+          onViewChange={handleNavigateView}
+          onOpenPostJob={() => setShowGlobalPostJobModal(true)}
+          onGoBack={handleGoBack}
+          canGoBack={canGoBack}
+        />
+        <AuthPage
+          initialMode={currentView === "auth-register" ? "register" : "login"}
+          onAuthSuccess={handleAuthSuccess}
+          onModeChange={(mode) => setCurrentView(`auth-${mode}`)}
+        />
+      </>
+    );
   }
 
   return (
-    <AuthPage
-      mode={view}
-      onAuthSuccess={handleAuthSuccess}
-      onModeChange={setView}
-    />
+    <div className="app-root">
+      <Navbar
+        currentView={currentView}
+        onViewChange={handleNavigateView}
+        onOpenPostJob={() => setShowGlobalPostJobModal(true)}
+        onGoBack={handleGoBack}
+        canGoBack={canGoBack}
+      />
+
+      <main className="app-main-content">
+        {currentView === "discovery" && (
+          <DiscoveryPage
+            onNavigateAuth={(authMode) => handleNavigateView(authMode)}
+          />
+        )}
+
+        {currentView === "candidate" && isAuthenticated && isJobSeeker && (
+          <CandidateDashboard
+            onExploreJobs={() => handleNavigateView("discovery")}
+          />
+        )}
+
+        {currentView === "employer" && isAuthenticated && isCompanyRep && (
+          <EmployerDashboard />
+        )}
+
+        {currentView === "admin" && isAuthenticated && isAdmin && (
+          <AdminDashboard />
+        )}
+      </main>
+
+      {/* Global Post Job Modal available to employers from Navbar CTA */}
+      {showGlobalPostJobModal && isAuthenticated && isCompanyRep && (
+        <JobFormModal
+          onClose={() => setShowGlobalPostJobModal(false)}
+          onSuccess={() => {
+            setShowGlobalPostJobModal(false);
+            if (currentView === "employer") {
+              setCurrentView("employer");
+            } else {
+              handleNavigateView("employer");
+            }
+          }}
+        />
+      )}
+    </div>
   );
 }
 
-function AuthPage({ mode, onAuthSuccess, onModeChange }) {
-  const isRegistering = mode === "register";
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    role: "job_seeker",
-  });
-  const [status, setStatus] = useState("idle");
-  const [errorMessage, setErrorMessage] = useState("");
-
-  function updateField(event) {
-    const { name, value } = event.target;
-    setFormData((current) => ({ ...current, [name]: value }));
-  }
-
-  async function fetchCurrentUser() {
-    const response = await apiClient.get("/auth/me/");
-    return response.data;
-  }
-
-  function getErrorMessage(error) {
-    if (error.response?.data?.error?.message) {
-      return error.response.data.error.message;
-    }
-
-    if (error.response?.data?.detail) {
-      return error.response.data.detail;
-    }
-
-    if (error.response?.status) {
-      return `Request failed with status ${error.response.status}.`;
-    }
-
-    if (error.request) {
-      return "The backend did not respond. Check that the Django server is running on port 8000.";
-    }
-
-    return error.message || "Something went wrong. Please try again.";
-  }
-
-  async function login(email, password) {
-    const response = await apiClient.post("/auth/login/", { email, password });
-
-    if (!response.data?.access || !response.data?.refresh) {
-      throw new Error("Login response did not include access and refresh tokens.");
-    }
-
-    localStorage.setItem("access_token", response.data.access);
-    localStorage.setItem("refresh_token", response.data.refresh);
-    return fetchCurrentUser();
-  }
-
-  async function handleSubmit(event) {
-    event.preventDefault();
-    setStatus("submitting");
-    setErrorMessage("");
-
-    try {
-      const email = formData.email.trim().toLowerCase();
-      const password = formData.password;
-
-      if (isRegistering) {
-        await apiClient.post("/auth/register/", {
-          name: formData.name.trim(),
-          email,
-          password,
-          role: formData.role,
-        });
-      }
-
-      const user = await login(email, password);
-      onAuthSuccess(user);
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
-    } finally {
-      setStatus("idle");
-    }
-  }
-
+export function App() {
   return (
-    <main className="auth-shell">
-      <div className="auth-backdrop" aria-hidden="true" />
-      <section className="auth-panel">
-        <div className="auth-copy">
-          <div className="brand-mark" aria-label="ByteCorp">
-            <span>BC</span>
-            <strong>ByteCorp</strong>
-          </div>
-          <p className="eyebrow">Talent Network</p>
-          <h1>{isRegistering ? "Create your account" : "Welcome back"}</h1>
-          <p className="subtitle">
-            {isRegistering
-              ? "Join a focused workspace for discovering roles, managing applications, and connecting with high-intent teams."
-              : "Sign in to browse curated openings, compare roles quickly, and keep your job search moving."}
-          </p>
-
-          <div className="auth-highlights" aria-label="Platform highlights">
-            <span>Verified roles</span>
-            <span>Smart discovery</span>
-            <span>Company profiles</span>
-          </div>
-        </div>
-
-        <div className="auth-card">
-          <div className="auth-card-header">
-            <p>{isRegistering ? "Start your profile" : "Account access"}</p>
-            <span>{isRegistering ? "2 min" : "Secure"}</span>
-          </div>
-
-          <div className="auth-tabs" aria-label="Authentication mode">
-            <button
-              className={!isRegistering ? "active" : ""}
-              type="button"
-              onClick={() => onModeChange("login")}
-            >
-              Login
-            </button>
-            <button
-              className={isRegistering ? "active" : ""}
-              type="button"
-              onClick={() => onModeChange("register")}
-            >
-              Register
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit}>
-            {isRegistering && (
-              <label>
-                Full name
-                <input
-                  minLength="2"
-                  name="name"
-                  onChange={updateField}
-                  required
-                  type="text"
-                  value={formData.name}
-                />
-              </label>
-            )}
-
-            <label>
-              Email
-              <input
-                autoComplete="email"
-                name="email"
-                onChange={updateField}
-                required
-                type="email"
-                value={formData.email}
-              />
-            </label>
-
-            <label>
-              Password
-              <input
-                autoComplete={isRegistering ? "new-password" : "current-password"}
-                minLength="8"
-                name="password"
-                onChange={updateField}
-                required
-                type="password"
-                value={formData.password}
-              />
-            </label>
-
-            {isRegistering && (
-              <fieldset>
-                <legend>Account type</legend>
-                <div className="role-options">
-                  <label className={formData.role === "job_seeker" ? "selected" : ""}>
-                    <input
-                      checked={formData.role === "job_seeker"}
-                      name="role"
-                      onChange={updateField}
-                      type="radio"
-                      value="job_seeker"
-                    />
-                    Job Seeker
-                  </label>
-                  <label
-                    className={
-                      formData.role === "company_representative" ? "selected" : ""
-                    }
-                  >
-                    <input
-                      checked={formData.role === "company_representative"}
-                      name="role"
-                      onChange={updateField}
-                      type="radio"
-                      value="company_representative"
-                    />
-                    Company Rep
-                  </label>
-                </div>
-              </fieldset>
-            )}
-
-            {errorMessage && <div className="error-box">{errorMessage}</div>}
-
-            <button
-              className="submit-button"
-              disabled={status === "submitting"}
-              type="submit"
-            >
-              {status === "submitting"
-                ? "Please wait..."
-                : isRegistering
-                  ? "Create account"
-                  : "Sign in"}
-            </button>
-          </form>
-        </div>
-      </section>
-    </main>
+    <ToastProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ToastProvider>
   );
 }
 

@@ -1,0 +1,25 @@
+# Node dependencies
+node_modules/
+package-lock.json
+
+# IDE and agents
+.vscode/
+.agent/
+.gemini/
+design-system/
+
+# Environment and logs
+*.log
+.env
+.DS_Store
+
+# Python
+Jobboard-Backend/venv/
+Jobboard-Backend/.venv/
+Jobboard-Backend/db.sqlite3
+Jobboard-Backend/__pycache__/
+*.pyc
+
+# Frontend build
+Jobboard-Frontend/dist/
+Jobboard-Frontend/dist-ssr/

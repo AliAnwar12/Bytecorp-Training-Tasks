@@ -1,64 +1,107 @@
-function JobCard({ job }) {
-  const companyName = job.company_name || "Company not available";
-  const location = job.location || "Location flexible";
-  const employmentType = formatLabel(job.employment_type || "Role type pending");
-  const salaryRange = formatSalary(job.salary_min, job.salary_max);
-  const status = job.status || "pending";
+import StatusBadge from "./StatusBadge";
+
+export function JobCard({
+  job,
+  onSelect,
+  onApply,
+  onEdit,
+  onDelete,
+  isEmployer = false,
+  hasApplied = false,
+}) {
+  const companyName = job.company_name || "Company";
+  const location = job.location || "Remote / Unspecified";
+  const status = job.status || "open";
+
+  const formatSalary = (min, max) => {
+    if (!min && !max) return "Compensation undisclosed";
+    const formatter = new Intl.NumberFormat("en-PK", {
+      maximumFractionDigits: 0,
+    });
+    if (min && max) return `PKR ${formatter.format(min)} – ${formatter.format(max)}`;
+    return min ? `From PKR ${formatter.format(min)}` : `Up to PKR ${formatter.format(max)}`;
+  };
+
+  const formatType = (type) => {
+    if (!type) return "Full-time";
+    return type.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  };
 
   return (
-    <article className="job-card">
-      <div className="job-card-header">
-        <div className="company-avatar" aria-hidden="true">
-          {companyName.slice(0, 1)}
+    <article
+      className={`job-card ${status !== "open" ? "job-card-inactive" : ""}`}
+      onClick={() => onSelect && onSelect(job)}
+    >
+      <div className="job-card-main-col">
+        <div className="job-card-header">
+          <div className="company-info-wrap">
+            <div className="company-logo-avatar" aria-hidden="true">
+              {companyName.slice(0, 1).toUpperCase()}
+            </div>
+            <span className="company-name-label">{companyName}</span>
+          </div>
+          <span className="job-post-date">{formatDate(job.created_at)}</span>
         </div>
-        <span className={`status-badge ${status}`}>{formatLabel(status)}</span>
+
+        <div className="job-card-body">
+          <h3 className="job-card-title">{job.title}</h3>
+          {job.description && (
+            <p className="job-card-description">{job.description}</p>
+          )}
+        </div>
+
+        <div className="job-card-tags">
+          <span className="tag-pill tag-location">📍 {location}</span>
+          <span className="tag-pill tag-type">💼 {formatType(job.employment_type)}</span>
+          <span className="tag-pill tag-salary">{formatSalary(job.salary_min, job.salary_max)}</span>
+        </div>
       </div>
 
-      <div className="job-card-body">
-        <p className="company-name">{companyName}</p>
-        <h3>{job.title || "Untitled role"}</h3>
-        <p className="description">
-          {job.description || "No description has been added yet."}
-        </p>
-      </div>
+      <div className="job-card-footer" onClick={(e) => e.stopPropagation()}>
+        <StatusBadge status={status} type="job" />
 
-      <div className="job-meta">
-        <span>{location}</span>
-        <span>{employmentType}</span>
-        <span>{salaryRange}</span>
+        {isEmployer ? (
+          <div className="card-employer-actions">
+            {onEdit && (
+              <button
+                className="secondary-btn edit-btn-sm"
+                onClick={() => onEdit(job)}
+              >
+                Edit
+              </button>
+            )}
+            {onDelete && (
+              <button
+                className="danger-btn delete-btn-sm"
+                onClick={() => onDelete(job.id)}
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        ) : (
+          onApply && (
+            <button
+              className={`primary-btn ${hasApplied ? "applied-btn" : ""}`}
+              disabled={status !== "open" || hasApplied}
+              onClick={() => onApply(job)}
+            >
+              {hasApplied ? "Applied ✓" : status === "open" ? "Apply" : "Closed"}
+            </button>
+          )
+        )}
       </div>
     </article>
   );
-}
-
-function formatLabel(value = "") {
-  return value.replaceAll("_", " ");
-}
-
-function formatSalary(min, max) {
-  if (!min && !max) {
-    return "Salary not listed";
-  }
-
-  if (min && max) {
-    return `${formatCurrency(min)} - ${formatCurrency(max)}`;
-  }
-
-  return min ? `From ${formatCurrency(min)}` : `Up to ${formatCurrency(max)}`;
-}
-
-function formatCurrency(value) {
-  const number = Number(value);
-
-  if (Number.isNaN(number)) {
-    return value;
-  }
-
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 0,
-    style: "currency",
-    currency: "USD",
-  }).format(number);
 }
 
 export default JobCard;

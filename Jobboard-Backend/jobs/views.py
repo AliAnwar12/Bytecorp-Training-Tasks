@@ -23,8 +23,18 @@ class JobViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Job.objects.select_related("company").filter(deleted_at__isnull=True)
 
-        # Public/job-seeker browsing should only expose open jobs.
         user = self.request.user
+
+        # Support scoping to only the authenticated employer's company jobs
+        if self.request.query_params.get("mine") == "true" and user.is_authenticated:
+            if user.role != User.Roles.ADMIN:
+                qs = qs.filter(
+                    company__members__user=user,
+                    company__members__deleted_at__isnull=True,
+                ).distinct()
+            return qs
+
+        # Public/job-seeker browsing should only expose open jobs.
         if not user.is_authenticated or user.role == User.Roles.JOB_SEEKER:
             qs = qs.filter(status=Job.Statuses.OPEN)
 
